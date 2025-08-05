@@ -26,7 +26,8 @@ struct TravelMasterApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+           // ContentView()
+            ChatView()
         }
         .modelContainer(sharedModelContainer)
     }
