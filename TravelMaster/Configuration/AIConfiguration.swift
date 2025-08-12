@@ -19,13 +19,13 @@ struct AIConfiguration {
     private init() {
         if let path = Bundle.main.path(forResource: "AIConfig", ofType: "plist"),
         let config = NSDictionary(contentsOfFile: path) {
-            self.apiKey = config["API_KEY"] as? String ?? "deepseek密钥"
+            self.apiKey = config["API_KEY"] as? String ?? ""
             self.baseURL = config["BASE_URL"] as? String ?? "https://api.deepseek.com"
             self.model = config["MODEL"] as? String ?? "deepseek-chat"
             self.maxTokens = config["MAX_TOKENS"] as? Int ?? 4000
             self.temperature = config["TEMPERATURE"] as? Double ?? 0.7
         } else {
-            self.apiKey = "deepseek密钥"
+            self.apiKey = ""
             self.baseURL = "https://api.deepseek.com"
             self.model = "deepseek-chat"
             self.maxTokens = 4000
