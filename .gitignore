@@ -1,0 +1,73 @@
+# 操作系统相关文件
+.DS_Store               # macOS
+Thumbs.db               # Windows
+ehthumbs.db             # Windows
+Desktop.ini             # Windows
+
+# 编辑器/IDE相关文件
+.idea/                  # IntelliJ IDEA
+.vscode/                # VS Code
+*.sublime-*             # Sublime Text
+*.swp                   # Vim交换文件
+*.swo                   # Vim交换文件
+*.nvim                  # Neovim文件
+.atom/                  # Atom编辑器
+*.suo                   # Visual Studio
+*.ntvs*                 # Visual Studio
+*.njsproj               # Visual Studio
+*.sln                   # Visual Studio
+*.sw?                   # 各种编辑器的临时文件
+
+# 日志文件
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 依赖包目录
+node_modules/           # Node.js
+vendor/                 # Composer (PHP)
+venv/                   # Python虚拟环境
+env/                    # Python虚拟环境
+__pycache__/            # Python编译文件
+*.py[cod]               # Python编译文件
+
+
+# 构建输出目录
+dist/                   # 常见的构建输出目录
+build/                  # 构建目录
+out/                    # 输出目录
+target/                 # Java构建目录
+
+# 环境变量和配置文件
+.env
+.env.local
+.env.*.local
+*.env
+!*.env.example          # 保留示例配置文件
+
+# 缓存文件
+.cache/
+.eslintcache
+.pytest_cache/
+.coverage
+.nyc_output/
+
+# 操作系统临时文件
+tmp/
+temp/
+
+# 数据库相关文件
+*.sql
+*.sqlite
+*.db
+
+# 压缩文件
+*.zip
+*.tar.gz
+*.tar.bz2
+*.rar
+
+# 配置文件
+*.plist
