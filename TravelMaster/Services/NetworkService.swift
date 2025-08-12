@@ -39,7 +39,7 @@ class NetworkService: NetworkServiceProtocol {
             messages: request.messages.map{ message in
                 APIMessageRequest(
                     role: message.role.rawValue,
-                    content: message.content,
+                    content: message.content ?? "",
                     toolCalls: message.toolCalls,
                     toolCallId: message.toolCallId
                 )

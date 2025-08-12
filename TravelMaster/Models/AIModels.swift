@@ -15,14 +15,14 @@ enum MessageRole: String, CaseIterable, Codable {
 }
 
 struct ChatMessage: Codable, Identifiable {
-    let id = UUID()
+    var id = UUID()
     let role: MessageRole
-    let content: String
+    let content: String?
     let timestamp: Date
     let toolCalls: [ToolCall]?
     let toolCallId: String?
     
-    init(role: MessageRole, content: String, toolCalls: [ToolCall]? = nil, toolCallId: String? = nil) {
+    init(role: MessageRole, content: String? = nil, toolCalls: [ToolCall]? = nil, toolCallId: String? = nil) {
         self.role = role
         self.content = content
         self.timestamp = Date()

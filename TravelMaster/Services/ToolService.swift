@@ -67,12 +67,17 @@ class CalculatorTool: BaseTool {
         }
         
         let mathExpression = NSExpression(format: expression)
-        if let result = mathExpression.expressionValue(with: nil, context: nil) as? NSNumber {
-            return "计算结果：\(result)"
-        } else {
+        guard let result = mathExpression.expressionValue(with: nil, context: nil) else {
             throw AIError.configurationError("Invalid math expression")
         }
-    }
+        let payload: [String: Any] = [
+            "ok": true,
+            "tool": name,
+            "expression": expression,
+            "value": result
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [])
+            return String(data: data, encoding: .utf8) ?? "{}"    }
 }
 
 class CurrentTimeTool: BaseTool {

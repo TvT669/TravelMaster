@@ -19,7 +19,17 @@ struct ChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView{
                         LazyVStack(alignment: .leading,spacing: 12){
-                            ForEach(agentService.messages){ message in
+                            ForEach(agentService.messages.filter {  msg in
+                                // 1) 隐藏纯 tool 消息
+                                if msg.role == .tool { return false }
+                                // 2) 隐藏 assistant 且仅用于触发工具（content 为空且有 toolCalls）的消息
+                                if msg.role == .assistant,
+                                msg.toolCalls?.isEmpty == false,
+                                (msg.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                  return false
+                                }
+                                return true
+                               }, id: \.id){ message in
                                 MessageBubble(message: message)
                                     .id(message.id)
                             }
@@ -92,7 +102,7 @@ struct MessageBubble: View {
             }
             
             VStack(alignment: .leading, spacing: 4){
-                Text(message.content.isEmpty ? "" : message.content)
+                Text(message.content ?? "" )
                     .padding()
                     .background(
                         message.role == .user ? Color.blue : Color.gray.opacity(0.2)
@@ -102,7 +112,7 @@ struct MessageBubble: View {
                     )
                     .cornerRadius(12)
                 //工具调用显示
-                if let toolCalls = message.toolCalls, !toolCalls.isEmpty{
+               if false, let toolCalls = message.toolCalls, !toolCalls.isEmpty{
                     ForEach(toolCalls, id: \.id) { toolCall in
                         Text("调用工具: \(toolCall.function.name)")
                             .font(.caption)
