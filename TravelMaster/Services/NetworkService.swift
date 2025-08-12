@@ -22,10 +22,7 @@ class NetworkService: NetworkServiceProtocol {
     }
     
     func sendChatRequest(_ request: ChatRequest) async throws -> ChatCompletionResponse {
-        // 修复调试输出
-           print("🔑 API Key: \(config.apiKey.prefix(20))...")  // 显示更多字符
-           print("🌐 Base URL: \(config.baseURL)")
-           print("📝 Request URL: \(config.baseURL)/chat/completions")
+      
         guard let url = URL(string: "\(config.baseURL)/chat/completions") else {
             throw AIError.invalidURL
         }
@@ -35,23 +32,7 @@ class NetworkService: NetworkServiceProtocol {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         
-        // 修复调试输出 - 显示完整的Authorization头（除了敏感部分）
-        print("📋 Request Headers:")
-        urlRequest.allHTTPHeaderFields?.forEach { key, value in
-            if key == "Authorization" {
-                // 显示 "Bearer sk-xxxxx...后10位"
-                let bearerToken = value
-                if bearerToken.count > 20 {
-                    let prefix = bearerToken.prefix(15)  // "Bearer sk-xxxxx"
-                    let suffix = bearerToken.suffix(10)   // "...后10位"
-                    print("  \(key): \(prefix)...\(suffix)")
-                } else {
-                    print("  \(key): \(value)")
-                }
-            } else {
-                print("  \(key): \(value)")
-            }
-        }
+     
         
         let requestBody = ChatRequestBody(
             model: config.model,

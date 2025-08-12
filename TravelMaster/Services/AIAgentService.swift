@@ -10,266 +10,126 @@ import Combine
 
 @MainActor
 class AIAgentService: ObservableObject {
+    // 发布的属性通过子组件暴露
     @Published var messages: [ChatMessage] = []
     @Published var currentState: AgentState = .idle
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     
-    private let networkService: NetworkServiceProtocol
-    private let storageService: StorageServiceProtocol
-    private let toolManager: ToolManager
-    
-    private var currentStep: Int = 0
-    private let maxSteps: Int = 10
+    private let stateMachine: AgentStateMachine
+    private let conversationManager: ConversationManager
+    private let executor: AgentExecutor
     
     init(
         networkService: NetworkServiceProtocol = NetworkService(),
         storageService: StorageServiceProtocol = StorageService(),
-        toolManager: ToolManager = ToolManager()
+        toolManager: ToolManager =  ToolManager()
     ) {
-        self.networkService = networkService
-        self.storageService = storageService
-        self.toolManager = toolManager
+        self.stateMachine = AgentStateMachine()
+        self.conversationManager = ConversationManager(storageService: storageService)
+        self.executor = AgentExecutor(networkService: networkService, toolManager: toolManager)
+        
+        // 绑定子组件的状态到主组件
+        setupBindings()
         
         Task {
-            await loadConversationHistory()
+            await conversationManager.loadHistory()
         }
     }
     
+    private func setupBindings() {
+        // 绑定状态
+        stateMachine.$currentState.assign(to: &$currentState)
+        stateMachine.$isLoading.assign(to: &$isLoading)
+        stateMachine.$errorMessage.assign(to: &$errorMessage)
+        
+        //绑定消息
+        conversationManager.$messages.assign(to: &$messages)
+    }
+    
     func sendMessage(_ content: String) async {
-        
-        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return
-        }
-        
-        print("📝 发送消息: \(content)")
-           print("🔄 当前状态: \(currentState)")
-           print("📊 当前消息数量: \(messages.count)")
-        
-        if currentState == .finished || currentState == .error {
-            currentState = .idle
-            print("🔄 状态已重置为 idle")
-        }
-        let userMessage = ChatMessage(role: .user, content: content)
-            messages.append(userMessage)
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        print("发送消息: \(content)")
+        print("当前状态: \(currentState)")
+        print("当前消息数量: \(messages.count)")
+              
+        stateMachine.reset()
+        conversationManager.addUserMessage(content)
         await runAgent()
     }
     
     func clearConversation() async {
-        messages.removeAll()
-        try? await storageService.clearConversations()
-        currentState = .idle
-        currentStep = 0
-        errorMessage = nil
-    }
-    
-    func loadConversationHistory() async {
-        do {
-            let conversations = try await storageService.loadConversations()
-            if let lastConversation = conversations.last {
-                messages = lastConversation
-            }
-        } catch {
-            print("Failed to load conversation history: \(error)")
-        }
+        await conversationManager.clearHistory()
+        stateMachine.reset()
     }
     
     private func runAgent() async {
-        
-        print("🤖 runAgent 开始，当前状态: \(currentState)")
-        guard currentState == .idle else {
-            print("Agent is already running")
+        guard stateMachine.canStartNewConversation() else {
+            print("智能体正在运行")
             return
         }
-        
-        isLoading = true
-        currentState = .thinking
-        currentStep = 0
-        errorMessage = nil
-        
-        do {
-            while currentStep < maxSteps && currentState != .finished {
-                currentStep += 1
+        stateMachine.startThinking()
+        do{
+            while stateMachine.shouldContinue(){
+                stateMachine.nextStep()
                 
-                let stepResult = await  executeStep()
-                print("📊 Step \(currentStep) result: \(stepResult)")
+                let stepResult = await executeStep()
+                print("步骤结果：\(stepResult)")
                 
                 if stepResult {
-                    if shouldFinish() {
-                        print("🏁 Should finish - 代理决定结束")
-                        currentState = .finished
+                    if shouldFinish(){
+                        stateMachine.finish()
                         break
                     }
                 } else {
-                    print("❌ Step failed - 步骤失败")
+                    print("❌ Step failed")
                     break
                 }
             }
-            try await storageService.saveConversation(messages)
+            try await conversationManager.saveHistory()
         } catch {
-            errorMessage = error.localizedDescription
-            currentState = .error
+            stateMachine.error(error.localizedDescription)
+            
         }
-       /* if currentState != .error && currentState != .finished {
-            currentState = .idle
-        }*/
-        isLoading = false
-        print("✅ runAgent 完成，最终状态: \(currentState)")    }
+        print("runAgent 完成，最终状态: \(currentState)")
+    }
     
     private func executeStep() async -> Bool {
-        print("🧠 开始思考...")
-        let shouldAct = await think()
-        print("🤔 思考结果 - 需要行动: \(shouldAct)")
-        
-        if !shouldAct {
-            print("🏁 不需要行动，设置为完成状态")
-            currentState = .finished
+        do {
+            //思考阶段
+            let (content, toolCalls) = try await executor.think(with: messages)
+            conversationManager.addAssistantMessage(content, toolCalls: toolCalls)
+            
+            //检查工具是否需要执行
+            guard let toolCalls = toolCalls, !toolCalls.isEmpty else {
+                print("不需要行动，设置为完成状态")
+                return true
+            }
+            
+            //执行工具
+            stateMachine.startActing()
+            let toolResults = await executor.executeTools(toolCalls)
+            
+            //添加工具结果消息
+            for(toolCallId, result) in toolResults {
+                conversationManager.addToolMessage(result, toolCallId: toolCallId)
+            }
+            
+            //获取最终响应
+            if let finalResponse = try await executor.getFinalResponse(with: messages) {
+                conversationManager.addAssistantMessage(finalResponse)
+            }
+            
             return true
-        }
-        
-        print("🎬 开始行动...")
-        currentState = .acting
-       // return await act()
-        let actResult = await act()
-          print("🎭 行动结果: \(actResult)")
-          return actResult
-    }
-    
-    private func think() async -> Bool {
-        do {
-            print("💭 构建请求...")
-            let request = ChatRequest(
-                messages: messages,
-                tools: toolManager.getAllTools(),
-                toolChoice: "auto")
-            
-            print("🌐 发送网络请求...")
-            let response = try await networkService.sendChatRequest(request)
-            
-            guard let choice = response.choices.first else {
-                print("❌ 没有收到有效响应")
-                throw AIError.invalidResponse
-            }
-            
-            let apiMessage = choice.message
-            print("📨 收到响应 - 内容长度: \(apiMessage.content?.count ?? 0)")
-            print("🔧 工具调用数量: \(apiMessage.toolCalls?.count ?? 0)")
-            
-            
-            let assistantMessage = ChatMessage(
-                role: .assistant,
-                content: apiMessage.content ?? "",
-                toolCalls: apiMessage.toolCalls
-            )
-            
-            messages.append(assistantMessage)
-            //return apiMessage.toolCalls != nil && !apiMessage.toolCalls!.isEmpty
-            let hasToolCalls = apiMessage.toolCalls != nil && !apiMessage.toolCalls!.isEmpty
-            print("🛠️ 是否有工具调用: \(hasToolCalls)")
-            return hasToolCalls
             
         } catch {
-            print("💥 Think error: \(error)")
-            errorMessage = error.localizedDescription
-            currentState = .error
-            return false
-            
-        }
-    }
-    
-    private func act() async -> Bool {
-        guard let lastMessage = messages.last,
-              let toolCalls = lastMessage.toolCalls,
-              !toolCalls.isEmpty else {
-            print("❌ 没有找到工具调用")
+            stateMachine.error(error.localizedDescription)
             return false
         }
-        
-        print("🔧 开始执行 \(toolCalls.count) 个工具调用")
-        var allSuccessful = true
-        
-     //   for toolCall in toolCalls {
-        for (index, toolCall) in toolCalls.enumerated() {
-               print("🛠️ 执行工具 \(index + 1): \(toolCall.function.name)")
-            do {
-                let arguments = try parseToolArguments(toolCall.function.arguments)
-                print("📝 工具参数: \(arguments)")
-                let result = try await toolManager.executeTool(
-                    name: toolCall.function.name,
-                    arguments: arguments
-                )
-                print("✅ 工具执行成功: \(result)")
-                
-                let toolMessage = ChatMessage(
-                    role: .tool,
-                    content: result,
-                    toolCallId: toolCall.id
-                )
-                messages.append(toolMessage)
-                
-            } catch {
-                print("❌ 工具执行失败: \(error)")
-                let errorMessage = "工具执行失败：\(error.localizedDescription)"
-                let toolMessage = ChatMessage (
-                    role: .tool,
-                    content: errorMessage,
-                    toolCallId: toolCall.id
-                )
-                messages.append(toolMessage)
-                allSuccessful = false
-            }
-        }
-        if allSuccessful {
-            print("🎯 所有工具执行成功，获取最终响应...")
-            await getFinalResponse()
-        }
-        print("🎭 Act 完成，成功: \(allSuccessful)")
-        return allSuccessful
-    }
-    
-    private func getFinalResponse() async {
-        do {
-            let request = ChatRequest (
-                messages: messages,
-                tools: nil,
-                toolChoice: nil
-            )
-            
-            let response = try await networkService.sendChatRequest(request)
-            
-            if let choice = response.choices.first,
-               let content = choice.message.content {
-                print("📝 收到最终响应: \(content)")
-                let finalMessage = ChatMessage(role: .assistant, content: content)
-                messages.append(finalMessage)
-            }
-        } catch {
-            print("💥 获取最终响应失败: \(error)")
-            let errorMessage = ChatMessage(
-                role: .assistant,
-                content:"抱歉，我在处理您的请求时遇到了问题：\(error.localizedDescription)"
-            )
-            messages.append(errorMessage)
-        }
-    }
-    
-    private func parseToolArguments(_ argumentsString: String) throws -> [String: Any] {
-        guard let data = argumentsString.data(using: .utf8) else {
-            throw AIError.decodingError(NSError(domain: "Invalid UTF-8", code: 0))
-        }
-        
-        let json = try JSONSerialization.jsonObject(with: data)
-        guard let arguments = json as? [String: Any] else {
-            throw AIError.decodingError(NSError(domain: "Invalid JSON format", code: 0))
-        }
-        
-        return arguments
     }
     
     private func shouldFinish() -> Bool {
-        guard let lastMessage = messages.last else {return true}
-        
-        return lastMessage.role == .assistant && (lastMessage.toolCalls == nil || lastMessage.toolCalls!.isEmpty)
+        guard let lastMessage = conversationManager.lastMessage else { return true}
+        return lastMessage.role == .assistant && (lastMessage.toolCalls  == nil || lastMessage.toolCalls!.isEmpty)
     }
-
 }
