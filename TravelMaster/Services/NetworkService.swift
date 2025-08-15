@@ -90,24 +90,34 @@ struct ToolDefinition: Codable {
     // 从 Tool 创建 ToolDefinition 的便利方法
     static func from(tool: Tool) -> ToolDefinition {
         let apiFormat = tool.toAPIFormat()
-        let function = apiFormat["function"] as! [String: Any]
-        let parameters = function["parameters"] as! [String: Any]
-        let properties = parameters["properties"] as! [String: [String: String]]
-        let required = parameters["required"] as! [String]
-        
+        let function = apiFormat["function"] as? [String: Any] ?? [:]
+        let params = function["parameters"] as? [String: Any] ?? [:]
+
+        // 解析 properties: [String: Any] -> [String: PropertyDefinition]
+        var props: [String: PropertyDefinition] = [:]
+        if let propertiesRaw = params["properties"] as? [String: Any] {
+            for (key, value) in propertiesRaw {
+                if let dict = value as? [String: Any] {
+                    let type = (dict["type"] as? String) ?? "string"
+                    let desc = (dict["description"] as? String) ?? ""
+                    props[key] = PropertyDefinition(type: type, description: desc)
+                }
+            }
+        }
+
+        let required = params["required"] as? [String] ?? []
+        let paramType = params["type"] as? String ?? "object"
+        let name = (function["name"] as? String) ?? tool.name
+        let desc = (function["description"] as? String) ?? tool.description
+
         return ToolDefinition(
             type: "function",
             function: FunctionDefinition(
-                name: function["name"] as! String,
-                description: function["description"] as! String,
+                name: name,
+                description: desc,
                 parameters: ParameterSchema(
-                    type: "object",
-                    properties: properties.mapValues { prop in
-                        PropertyDefinition(
-                            type: prop["type"]!,
-                            description: prop["description"]!
-                        )
-                    },
+                    type: paramType,
+                    properties: props,
                     required: required
                 )
             )
@@ -187,4 +197,3 @@ enum AIError: Error, LocalizedError {
         }
     }
 }
-
