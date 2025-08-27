@@ -13,7 +13,9 @@ enum Tools {
             CalculatorTool(),
             CurrentTimeTool(),
             HotelNearMetroTool(),
-            RoutePlannerTool()
+            RoutePlannerTool(),
+            BudgetAnalyzerTool(),
+            FlightSearchTool()
            
             // 在此添加新工具
         ]
